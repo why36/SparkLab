@@ -49,8 +49,9 @@ public class Count {
       String line = value.toString();
       String item[] = line.split(",");
       try {
+          if("".equals(item[1])) return;
           int age = Integer.parseInt(item[1]);
-          if(age > 3){
+          if(age > 3 || age == 0 ){
             return;
           }
       } catch (NumberFormatException e) {
