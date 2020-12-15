@@ -33,7 +33,7 @@ import org.apache.hadoop.io.WritableComparable;
 
 public class Count {
 
-  public static class TokenizerMapper
+  public static class StepOneMapper
        extends Mapper<Object, Text, Text, IntWritable>{
 
     static enum CountersEnum { INPUT_WORDS }
@@ -41,66 +41,27 @@ public class Count {
     private final static IntWritable one = new IntWritable(1);
     private Text word = new Text();
 
-    private boolean caseSensitive;
-    private Set<String> patternsToSkip = new HashSet<String>();
     private Configuration conf;
     private BufferedReader fis;
 
     @Override
-    public void setup(Context context) throws IOException,
-        InterruptedException {
-      conf = context.getConfiguration();
-      caseSensitive = conf.getBoolean("wordcount.case.sensitive", false);
-      if (conf.getBoolean("wordcount.skip.patterns", false)) {
-        URI[] patternsURIs = Job.getInstance(conf).getCacheFiles();
-        for (URI patternsURI : patternsURIs) {
-          Path patternsPath = new Path(patternsURI.getPath());
-          String patternsFileName = patternsPath.getName().toString();
-          parseSkipFile(patternsFileName);
-        }
-      }
-    }
-
-    private void parseSkipFile(String fileName) {
-      try {
-        fis = new BufferedReader(new FileReader(fileName));
-        String pattern = null;
-        while ((pattern = fis.readLine()) != null) {
-          patternsToSkip.add(pattern);
-        }
-      } catch (IOException ioe) {
-        System.err.println("Caught exception while parsing the cached file '"
-            + StringUtils.stringifyException(ioe));
-      }
-    }
-
-    @Override
     public void map(Object key, Text value, Context context
                     ) throws IOException, InterruptedException {
-      String line = (caseSensitive) ?
-          value.toString() : value.toString().toLowerCase();
-      line = line.replaceAll("\\d+", "");//数字
-      line = line.replaceAll("[\\pP+~$`^=|<>～｀＄＾＋＝｜＜＞￥×]","");//一切标点
+      if (key.toString().equals("0")) {
+        return;
+      }
 
-      StringTokenizer itr = new StringTokenizer(line);
-        while(itr.hasMoreTokens()){
-          boolean flag = true;
-          String tmpToken = itr.nextToken(); //不能使用整行line
-          if(tmpToken.length()<3) continue;
-          for (String pattern : patternsToSkip){
-            if(Pattern.matches(pattern,tmpToken)) flag = false;
-          }
-          if(flag){
-            word.set(tmpToken);
-					  context.write(word,one);  
-					  Counter counter = context.getCounter(CountersEnum.class.getName(),CountersEnum.INPUT_WORDS.toString());
-					  counter.increment(1);
-				}
+      String line = value.toString();
+      String item[] = line.split(",");
+      String action_type = item[item.length - 1];
+      if(action_type.equals("1") || action_type.equals("2") || action_type.equals("3")) {
+        word.set(item[1]);
+        context.write(word,one);
       }
     }
   }
 
-  public static class IntSumReducer
+  public static class StepOneReducer
        extends Reducer<Text,IntWritable,Text,IntWritable> {
     private IntWritable result = new IntWritable();
 
@@ -126,7 +87,7 @@ public class Count {
       }     
   }
 
-	public static class MyReducer extends Reducer <IntWritable,Text,Text,IntWritable>{
+	public static class StepTwoReducer extends Reducer <IntWritable,Text,Text,IntWritable>{
 		private int cnt=0;
 		public void reduce(IntWritable key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
 			for (Text val:values){
@@ -141,57 +102,48 @@ public class Count {
 			}
 		}
 	}
+
+
+
   public static void main(String[] args) throws Exception {
     Configuration conf = new Configuration();
-    GenericOptionsParser optionParser = new GenericOptionsParser(conf, args);
-    String[] remainingArgs = optionParser.getRemainingArgs();
-    if ((remainingArgs.length != 2) && (remainingArgs.length != 4)) {
-      System.err.println("Usage: wordcount <in> <out> [-skip skipPatternFile]");
-      System.exit(2);
-    }
-    Job job = Job.getInstance(conf, "word count");
-    job.setJarByClass(WordCount.class);
-    job.setMapperClass(TokenizerMapper.class);
-    job.setCombinerClass(IntSumReducer.class);
-    job.setReducerClass(IntSumReducer.class);
+
+    Job job = Job.getInstance(conf, "count");
+    job.setJarByClass(Count.class);
+    job.setMapperClass(StepOneMapper.class);
+    job.setCombinerClass(StepOneReducer.class);
+    job.setReducerClass(StepOneReducer.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(IntWritable.class);
-
     job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
 
 
-    List<String> otherArgs = new ArrayList<String>();
-    for (int i=0; i < remainingArgs.length; ++i) {
-      if ("-skip".equals(remainingArgs[i])) {
-        job.addCacheFile(new Path(remainingArgs[++i]).toUri());
-        job.getConfiguration().setBoolean("wordcount.skip.patterns", true);
-      } else {
-        otherArgs.add(remainingArgs[i]);
-      }
-    }
-
     Path intermediatePath = new Path("IntermediateOutput");
-    FileInputFormat.addInputPath(job, new Path(otherArgs.get(0)));
+    FileInputFormat.addInputPath(job, new Path(args[0]));
     FileOutputFormat.setOutputPath(job, intermediatePath);
     job.waitForCompletion(true);
 
     System.out.println("开始第二个任务");
 
-    Job sortjob = Job.getInstance(conf, "word count sort");
-    sortjob.setJarByClass(WordCount.class);
+    Job sortjob = Job.getInstance(conf, "count sort");
+    sortjob.setJarByClass(Count.class);
     FileInputFormat.addInputPath(sortjob, intermediatePath);
-    FileOutputFormat.setOutputPath(sortjob, new Path(otherArgs.get(1)));
+    FileOutputFormat.setOutputPath(sortjob, new Path(args[1]));
     sortjob.setInputFormatClass(SequenceFileInputFormat.class);
     sortjob.setMapperClass(InverseMapper.class);
-    sortjob.setReducerClass(MyReducer.class);
+    sortjob.setReducerClass(StepTwoReducer.class);
     sortjob.setSortComparatorClass(IntWritableDecreasingComparator.class);
-    sortjob.setOutputKeyClass(IntWritable.class);
-    sortjob.setOutputValueClass(Text.class);
+    //sortjob.setOutputKeyClass(IntWritable.class);
+    //sortjob.setOutputValueClass(Text.class);
+    sortjob.setOutputKeyClass(Text.class);
+    sortjob.setOutputValueClass(IntWritable.class);
+    sortjob.setMapOutputKeyClass(IntWritable.class);
+    sortjob.setMapOutputValueClass(Text.class);
 
     sortjob.waitForCompletion(true);
 
     FileSystem.get(conf).delete(intermediatePath);
-    System.exit(job.waitForCompletion(true) ? 0 : 1);
+    System.exit(sortjob.waitForCompletion(true) ? 0 : 1);
   }
 }
