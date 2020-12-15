@@ -104,7 +104,7 @@ public class Count {
 		public void reduce(IntWritable key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
 			for (Text val:values){
 				cnt = cnt+1;
-				if(cnt > 30)
+				if(cnt > 100)
 					return;
 				else{
 					String t = cnt + ":" + val.toString() + ",";
