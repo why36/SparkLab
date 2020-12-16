@@ -33,9 +33,12 @@ import org.apache.hadoop.io.WritableComparable;
 
 public class Count {
 
-  public static class StepZeroMapper
-       extends Mapper<Object, Text, Text, Text>{
+  public static class StepOneMapper
+       extends Mapper<Object, Text, Text, IntWritable>{
 
+    static enum CountersEnum { INPUT_WORDS }
+
+    private final static IntWritable one = new IntWritable(1);
     private Text word = new Text();
 
     private Configuration conf;
@@ -50,27 +53,6 @@ public class Count {
 
       String line = value.toString();
       String item[] = line.split(",");
-      String id = item[0] + "#" + item[1] + "#" + item[item.length - 1];
-      word.set(id);
-      context.write(word,new Text(""));
-    }
-  }
-
-
-  public static class StepOneMapper
-       extends Mapper<Text, Text, Text, IntWritable>{
-
-    private final static IntWritable one = new IntWritable(1);
-    private Text word = new Text();
-
-    private Configuration conf;
-    private BufferedReader fis;
-
-    public void map(Object key, Text value, Context context
-                    ) throws IOException, InterruptedException {
-
-      String line = value.toString();
-      String item[] = line.split("#");
       String action_type = item[item.length - 1];
       if(action_type.equals("1") || action_type.equals("2") || action_type.equals("3")) {
         word.set(item[1]);
@@ -124,23 +106,8 @@ public class Count {
 
 
   public static void main(String[] args) throws Exception {
-    Configuration conf = new Configuration(); 
+    Configuration conf = new Configuration();
 
-    Job prejob = Job.getInstance(conf, "count");
-    prejob.setJarByClass(Count.class);
-    prejob.setMapperClass(StepZeroMapper.class);
-    prejob.setNumReduceTasks(0);
-    //prejob.setReducerClass(StepOneReducer.class);
-    prejob.setOutputKeyClass(Text.class);
-    prejob.setOutputValueClass(Text.class);
-    prejob.setOutputFormatClass(SequenceFileOutputFormat.class);
-
-    Path intermediatePath1 = new Path("IntermediateOutput1");
-    FileInputFormat.addInputPath(prejob, new Path(args[0]));
-    FileOutputFormat.setOutputPath(prejob, intermediatePath1);
-    prejob.waitForCompletion(true);
-
-    System.out.println("开始第一个任务");
     Job job = Job.getInstance(conf, "count");
     job.setJarByClass(Count.class);
     job.setMapperClass(StepOneMapper.class);
@@ -151,21 +118,24 @@ public class Count {
     job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
 
-    Path intermediatePath2 = new Path("IntermediateOutput2");
-    FileInputFormat.addInputPath(job, intermediatePath1);
-    FileOutputFormat.setOutputPath(job, intermediatePath2);
+
+    Path intermediatePath = new Path("IntermediateOutput");
+    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileOutputFormat.setOutputPath(job, intermediatePath);
     job.waitForCompletion(true);
 
     System.out.println("开始第二个任务");
 
     Job sortjob = Job.getInstance(conf, "count sort");
     sortjob.setJarByClass(Count.class);
-    FileInputFormat.addInputPath(sortjob, intermediatePath2);
+    FileInputFormat.addInputPath(sortjob, intermediatePath);
     FileOutputFormat.setOutputPath(sortjob, new Path(args[1]));
     sortjob.setInputFormatClass(SequenceFileInputFormat.class);
     sortjob.setMapperClass(InverseMapper.class);
     sortjob.setReducerClass(StepTwoReducer.class);
     sortjob.setSortComparatorClass(IntWritableDecreasingComparator.class);
+    //sortjob.setOutputKeyClass(IntWritable.class);
+    //sortjob.setOutputValueClass(Text.class);
     sortjob.setOutputKeyClass(Text.class);
     sortjob.setOutputValueClass(IntWritable.class);
     sortjob.setMapOutputKeyClass(IntWritable.class);
@@ -173,8 +143,7 @@ public class Count {
 
     sortjob.waitForCompletion(true);
 
-    FileSystem.get(conf).delete(intermediatePath1);
-    FileSystem.get(conf).delete(intermediatePath2);
+    FileSystem.get(conf).delete(intermediatePath);
     System.exit(sortjob.waitForCompletion(true) ? 0 : 1);
   }
 }
