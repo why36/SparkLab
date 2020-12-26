@@ -63,7 +63,8 @@ public class Count {
       int count = 0;
       for(String s : log) {
         String action_type = s.substring(s.length()-1);
-        if(action_type.equals("1") || action_type.equals("2") || action_type.equals("3")) {
+        String time_stamp = item[item.length - 2];
+        if((time_stamp.equals("1111")&&action_type.equals("1") || action_type.equals("2") || action_type.equals("3"))) {
           count++;
         }
       }
