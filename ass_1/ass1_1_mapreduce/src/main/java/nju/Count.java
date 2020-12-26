@@ -53,8 +53,9 @@ public class Count {
 
       String line = value.toString();
       String item[] = line.split(",");
+      String time_stamp = item[item.length - 2];
       String action_type = item[item.length - 1];
-      if(action_type.equals("1") || action_type.equals("2") || action_type.equals("3")) {
+      if(time_stamp.equals("1111")&&(action_type.equals("1") || action_type.equals("2") || action_type.equals("3"))) {
         word.set(item[1]);
         context.write(word,one);
       }

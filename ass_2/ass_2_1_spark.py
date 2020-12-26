@@ -11,6 +11,7 @@ lines = lines.filter(lambda row:row != header)#删除第一行
 
 #%%
 count = lines.map(lambda line: line.split(",")) \
+        .filter(lambda line: line[-2] == "1111") \
         .filter(lambda key: key[-1] == "2") \
         .map(lambda key: (key[0] + "#" + key[1] + "#" + key[6],key)) \
         .reduceByKey(lambda x,y: x) \

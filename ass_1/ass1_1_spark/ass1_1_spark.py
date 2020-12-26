@@ -14,6 +14,7 @@ count = lines.map(lambda line: line.split(",")) \
         .map(lambda key: (key[0] + "#" + key[1] + "#" + key[6],key)) \
         .reduceByKey(lambda x,y: x) \
         .map(lambda x: x[1]) \
+        .filter(lambda line: line[-2] == "1111") \
         .filter(lambda line: line[-1] != "0") \
         .map(lambda key: (key[1], 1)) \
         .reduceByKey(lambda a, b: a + b) \
